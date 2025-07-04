@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './index.css';
 import { packages, categoryNames, addons } from './packages.js';
 import PerryAssistant from './components/PerryAssistant.js';
+import { 
+  addBooking, 
+  getBookings, 
+  getDiscountCodes,
+  getDiscountCodeByCode,
+  addDiscountCode,
+  saveSettings,
+  getSettings,
+  saveBlockedDates,
+  getBlockedDates,
+  saveBlockedTimeSlots,
+  getBlockedTimeSlots,
+  subscribeToBookings,
+  subscribeToNotifications
+} from './firebaseService.js';
 function App() {
   const [currentStep, setCurrentStep] = useState('welcome');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -25,7 +40,9 @@ function App() {
   const [formErrors, setFormErrors] = useState({});
   const [showTermsPopup, setShowTermsPopup] = useState(false);
 
-  const [bookings, setBookings] = useState([]); // For future admin functionality
+  const [bookings, setBookings] = useState([]); // Firebase bookings
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Admin states
   const [currentView, setCurrentView] = useState('client'); // 'client' or 'admin'
@@ -224,6 +241,97 @@ The Peridot Images Team
     };
   });
 
+  // Load data from Firebase on component mount
+  useEffect(() => {
+    const loadFirebaseData = async () => {
+      try {
+        setLoading(true);
+        
+        // Load bookings
+        const bookingsData = await getBookings();
+        setBookings(bookingsData);
+        
+        // Load discount codes
+        const discountData = await getDiscountCodes();
+        setDiscountCodes(discountData);
+        
+        // Load blocked dates
+        const blockedDatesData = await getBlockedDates();
+        setBlockedDates(blockedDatesData);
+        
+        // Load blocked time slots
+        const blockedTimeSlotsData = await getBlockedTimeSlots();
+        setBlockedTimeSlots(blockedTimeSlotsData);
+        
+        // Load settings
+        const emailSettingsData = await getSettings('emailSettings');
+        if (emailSettingsData) {
+          setEmailSettings(emailSettingsData);
+        }
+        
+        const emailTemplatesData = await getSettings('emailTemplates');
+        if (emailTemplatesData) {
+          setEmailTemplates(emailTemplatesData);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading Firebase data:', error);
+        setLoading(false);
+      }
+    };
+
+    loadFirebaseData();
+  }, []);
+
+  // Set up real-time listeners
+  useEffect(() => {
+    // Subscribe to bookings changes
+    const unsubscribeBookings = subscribeToBookings((bookings) => {
+      setBookings(bookings);
+    });
+
+    // Subscribe to notifications changes
+    const unsubscribeNotifications = subscribeToNotifications((notifications) => {
+      // Handle notifications if needed
+    });
+
+    return () => {
+      unsubscribeBookings();
+      unsubscribeNotifications();
+    };
+  }, []);
+
+  // Save email settings to Firebase when they change
+  useEffect(() => {
+    const saveEmailSettings = async () => {
+      try {
+        await saveSettings('emailSettings', emailSettings);
+      } catch (error) {
+        console.error('Error saving email settings:', error);
+      }
+    };
+
+    if (emailSettings) {
+      saveEmailSettings();
+    }
+  }, [emailSettings]);
+
+  // Save email templates to Firebase when they change
+  useEffect(() => {
+    const saveEmailTemplates = async () => {
+      try {
+        await saveSettings('emailTemplates', emailTemplates);
+      } catch (error) {
+        console.error('Error saving email templates:', error);
+      }
+    };
+
+    if (emailTemplates) {
+      saveEmailTemplates();
+    }
+  }, [emailTemplates]);
+
   const [currentSession, setCurrentSession] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
 
@@ -408,34 +516,40 @@ React.useEffect(() => {
   };
 
   // Block/Unblock date functions
-  const toggleDateBlock = (date) => {
-    setBlockedDates(prev => {
-      const newBlocked = prev.includes(date) 
-        ? prev.filter(d => d !== date)
-        : [...prev, date];
+  const toggleDateBlock = async (date) => {
+    try {
+      const newBlocked = blockedDates.includes(date) 
+        ? blockedDates.filter(d => d !== date)
+        : [...blockedDates, date];
       
-      localStorage.setItem('peridotBlockedDates', JSON.stringify(newBlocked));
-      return newBlocked;
-    });
+      await saveBlockedDates(newBlocked);
+      setBlockedDates(newBlocked);
+    } catch (error) {
+      console.error('Error updating blocked dates:', error);
+      alert('Error updating blocked dates. Please try again.');
+    }
   };
 
   // Block/Unblock time slot functions
-  const toggleTimeSlotBlock = (date, time) => {
-    setBlockedTimeSlots(prev => {
+  const toggleTimeSlotBlock = async (date, time) => {
+    try {
       const dateKey = date;
-      const currentSlots = prev[dateKey] || [];
+      const currentSlots = blockedTimeSlots[dateKey] || [];
       const newSlots = currentSlots.includes(time)
         ? currentSlots.filter(t => t !== time)
         : [...currentSlots, time];
       
       const newBlockedTimeSlots = {
-        ...prev,
+        ...blockedTimeSlots,
         [dateKey]: newSlots
       };
       
-      localStorage.setItem('peridotBlockedTimeSlots', JSON.stringify(newBlockedTimeSlots));
-      return newBlockedTimeSlots;
-    });
+      await saveBlockedTimeSlots(newBlockedTimeSlots);
+      setBlockedTimeSlots(newBlockedTimeSlots);
+    } catch (error) {
+      console.error('Error updating blocked time slots:', error);
+      alert('Error updating blocked time slots. Please try again.');
+    }
   };
 
   // Add/Remove fake booking functions
@@ -760,28 +874,34 @@ The Peridot Images Team
     setAdminCurrentTab('dashboard');
   };
 
-  const updateBookingStatus = (bookingId, newStatus, paymentStatus = null, extraData = {}) => {
-    setBookings(prev => {
-      const updated = prev.map(booking => {
-        if (booking.id === bookingId) {
-          const updatedBooking = {
-            ...booking,
-            status: newStatus,
-            ...(paymentStatus && { paymentStatus }),
-            ...(newStatus === 'confirmed' && { confirmedAt: new Date().toISOString() }),
-            ...(newStatus === 'cancelled' && { cancelledAt: new Date().toISOString() }),
-            ...extraData // For invoice tracking, etc.
-          };
-          return updatedBooking;
-        }
-        return booking;
-      });
+  const updateBookingStatus = useCallback(async (bookingId, newStatus, paymentStatus = null, extraData = {}) => {
+    try {
+      const updateData = {
+        status: newStatus,
+        ...(paymentStatus && { paymentStatus }),
+        ...(newStatus === 'confirmed' && { confirmedAt: new Date().toISOString() }),
+        ...(newStatus === 'cancelled' && { cancelledAt: new Date().toISOString() }),
+        ...extraData // For invoice tracking, etc.
+      };
       
-      // Update localStorage
-      localStorage.setItem('peridotBookings', JSON.stringify(updated));
-      return updated;
-    });
-  };
+      // Update in Firebase
+      await updateBookingStatus(bookingId, newStatus, paymentStatus, updateData);
+      
+      // Update local state
+      setBookings(prev => {
+        const updated = prev.map(booking => {
+          if (booking.id === bookingId) {
+            return { ...booking, ...updateData };
+          }
+          return booking;
+        });
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error updating booking status:', error);
+      alert('Error updating booking status. Please try again.');
+    }
+  }, []);
 
   const calculateRevenue = () => {
     const confirmedBookings = bookings.filter(b => b.status === 'confirmed' && b.paymentStatus === 'paid');
@@ -924,18 +1044,21 @@ The Peridot Images Team
     });
   };
 
-  const applyDiscountCode = (code) => {
-    const discount = discountCodes.find(d => 
-      d.code === code && d.isActive && new Date(d.expiryDate) > new Date()
-    );
-    
-    if (discount) {
-      setAppliedDiscount(discount);
-      setDiscountCode('');
-      alert('Discount applied successfully! ✨');
-      return true;
-    } else {
-      alert('Invalid or expired discount code');
+  const applyDiscountCode = async (code) => {
+    try {
+      const discount = await getDiscountCodeByCode(code);
+      if (discount && discount.isActive && new Date(discount.expiryDate) > new Date()) {
+        setAppliedDiscount(discount);
+        setDiscountCode('');
+        alert('Discount applied successfully! ✨');
+        return true;
+      } else {
+        alert('Invalid or expired discount code');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error applying discount code:', error);
+      alert('Error applying discount code. Please try again.');
       return false;
     }
   };
@@ -1027,70 +1150,78 @@ The Peridot Images Team
     setCurrentStep('payment');
   };
 
-  const handleBookingComplete = () => {
-    // Create booking object with proper status structure
-    const newBooking = {
-      id: Date.now(),
-      clientName: clientInfo.name,
-      email: clientInfo.email,
-      phone: clientInfo.phone,
-      birthday: clientInfo.birthday,
-      paymentName: clientInfo.paymentName,
-      preferredCommunication: clientInfo.preferredCommunication,
-      package: selectedPackage.name,
-      packagePrice: selectedPackage.price,
-      addons: selectedAddons,
-      discount: appliedDiscount,
-      totalPrice: calculateTotal(),
-      date: selectedDate,
-      time: selectedTime,
-      duration: selectedPackage.duration,
-      location: 'Barrhaven Studio, Ottawa',
-      status: 'held', // held, confirmed, cancelled
-      paymentStatus: 'pending', // pending, paid, refunded
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // 4 hours from now
-      confirmedAt: null,
-      cancelledAt: null
-    };
+  const handleBookingComplete = async () => {
+    if (isSubmitting) return; // Prevent multiple clicks
+    setIsSubmitting(true); // This makes it show "Processing..."
+    
+    try {
+      console.log('Starting booking process...'); // ADD THIS LINE
+      
+      // Create booking object with proper status structure
+      const newBooking = {
+        clientName: clientInfo.name,
+        email: clientInfo.email,
+        phone: clientInfo.phone,
+        birthday: clientInfo.birthday,
+        paymentName: clientInfo.paymentName,
+        preferredCommunication: clientInfo.preferredCommunication,
+        package: selectedPackage.name,
+        packagePrice: selectedPackage.price,
+        addons: selectedAddons,
+        discount: appliedDiscount,
+        totalPrice: calculateTotal(),
+        date: selectedDate,
+        time: selectedTime,
+        duration: selectedPackage.duration,
+        location: 'Barrhaven Studio, Ottawa',
+        status: 'held', // held, confirmed, cancelled
+        paymentStatus: 'pending', // pending, paid, refunded
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // 4 hours from now
+        confirmedAt: null,
+        cancelledAt: null
+      };
 
-    // Add to bookings array (for future admin use)
-    setBookings(prev => [...prev, newBooking]);
-    
-    // Store in localStorage for persistence until we have backend
-    const existingBookings = JSON.parse(localStorage.getItem('peridotBookings') || '[]');
-    existingBookings.push(newBooking);
-    localStorage.setItem('peridotBookings', JSON.stringify(existingBookings));
-    
-    // Auto-send confirmation email if enabled
-    if (emailSettings.autoConfirmation) {
-      sendAutomatedEmail(newBooking, 'confirmation');
-    }
+      console.log('About to save booking:', newBooking); // ADD THIS LINE
+      
+      // Save to Firebase
+      const bookingId = await addBooking(newBooking);
+      
+      console.log('Booking saved with ID:', bookingId); // ADD THIS LINE
+      
+      // Update local state with Firebase ID
+      const bookingWithId = { ...newBooking, id: bookingId };
+      setBookings(prev => [...prev, bookingWithId]);
+      
+      // Auto-send confirmation email if enabled
+      if (emailSettings.autoConfirmation) {
+        sendAutomatedEmail(bookingWithId, 'confirmation');
+      }
 
-    // Add admin notification for new booking
-    const notification = {
-      id: Date.now(),
-      type: 'booking',
-      message: `New booking from ${clientInfo.name} - ${selectedPackage.name} on ${formatDate(selectedDate)} at ${selectedTime}`,
-      data: newBooking,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    
-    const existingNotifications = JSON.parse(localStorage.getItem('peridotAdminNotifications') || '[]');
-    existingNotifications.unshift(notification);
-    localStorage.setItem('peridotAdminNotifications', JSON.stringify(existingNotifications));
-    
-    // Show browser notification if supported
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('🎉 New Booking - Peridot Images', {
-        body: `${clientInfo.name} just booked ${selectedPackage.name} for ${formatDate(selectedDate)} at ${selectedTime}`,
-        icon: '/logo192.png',
-        tag: 'new-booking'
+      // Add admin notification for new booking
+      await addAdminNotification('booking', `New booking from ${clientInfo.name} - ${selectedPackage.name} on ${formatDate(selectedDate)} at ${selectedTime}`, {
+        bookingId: bookingId,
+        clientName: clientInfo.name,
+        packageName: selectedPackage.name,
+        date: selectedDate,
+        time: selectedTime
       });
+      
+      // Show browser notification if supported
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('🎉 New Booking - Peridot Images', {
+          body: `${clientInfo.name} just booked ${selectedPackage.name} for ${formatDate(selectedDate)} at ${selectedTime}`,
+          icon: '/logo192.png',
+          tag: 'new-booking'
+        });
+      }
+      
+      setCurrentStep('confirmation');
+    } catch (error) {
+      console.error('Booking failed:', error); // This should show the real error
+      alert('Booking failed: ' + error.message);
+    } finally {
+      setIsSubmitting(false); // ADD THIS LINE - this will stop "Processing..."
     }
-    
-    setCurrentStep('confirmation');
   };
 
   // CORRECT HST CALCULATION - For prices that INCLUDE HST
@@ -1508,25 +1639,37 @@ The Peridot Images Team
     window.URL.revokeObjectURL(url);
   }
 
-  function updateDiscountCode() {
-    setDiscountCodes(prev => prev.map(dc =>
-      dc.id === discountFormData.id ? { ...discountFormData, id: discountFormData.id, createdAt: dc.createdAt || new Date().toISOString() } : dc
-    ));
-    setShowDiscountForm(false);
-    setEditingDiscount(null);
-    resetDiscountForm();
+  async function updateDiscountCode() {
+    try {
+      await updateDiscountCode(discountFormData.id, discountFormData);
+      setDiscountCodes(prev => prev.map(dc =>
+        dc.id === discountFormData.id ? { ...discountFormData, id: discountFormData.id, createdAt: dc.createdAt || new Date().toISOString() } : dc
+      ));
+      setShowDiscountForm(false);
+      setEditingDiscount(null);
+      resetDiscountForm();
+    } catch (error) {
+      console.error('Error updating discount code:', error);
+      alert('Error updating discount code. Please try again.');
+    }
   }
 
-  function createDiscountCode() {
-    const newCode = {
-      ...discountFormData,
-      id: discountFormData.code,
-      createdAt: new Date().toISOString(),
-    };
-    setDiscountCodes(prev => [...prev, newCode]);
-    setShowDiscountForm(false);
-    setEditingDiscount(null);
-    resetDiscountForm();
+  async function createDiscountCode() {
+    try {
+      const discountId = await addDiscountCode(discountFormData);
+      const newCode = {
+        ...discountFormData,
+        id: discountId,
+        createdAt: new Date().toISOString(),
+      };
+      setDiscountCodes(prev => [...prev, newCode]);
+      setShowDiscountForm(false);
+      setEditingDiscount(null);
+      resetDiscountForm();
+    } catch (error) {
+      console.error('Error creating discount code:', error);
+      alert('Error creating discount code. Please try again.');
+    }
   }
 
   function getBookingsWithDiscount(code) {
@@ -1539,19 +1682,33 @@ The Peridot Images Team
     setShowDiscountForm(true);
   }
 
-  function toggleDiscountStatus(id) {
-    setDiscountCodes(prev => prev.map(dc =>
-      dc.id === id ? { ...dc, isActive: !dc.isActive } : dc
-    ));
+  async function toggleDiscountStatus(id) {
+    try {
+      const discount = discountCodes.find(dc => dc.id === id);
+      const newStatus = !discount.isActive;
+      await updateDiscountCode(id, { isActive: newStatus });
+      setDiscountCodes(prev => prev.map(dc =>
+        dc.id === id ? { ...dc, isActive: newStatus } : dc
+      ));
+    } catch (error) {
+      console.error('Error toggling discount status:', error);
+      alert('Error updating discount status. Please try again.');
+    }
   }
 
-  function deleteDiscountCode(id) {
+  async function deleteDiscountCode(id) {
     if (window.confirm('Are you sure you want to delete this discount code?')) {
-      setDiscountCodes(prev => prev.filter(dc => dc.id !== id));
-      if (editingDiscount && editingDiscount.id === id) {
-        setEditingDiscount(null);
-        resetDiscountForm();
-        setShowDiscountForm(false);
+      try {
+        await deleteDiscountCode(id);
+        setDiscountCodes(prev => prev.filter(dc => dc.id !== id));
+        if (editingDiscount && editingDiscount.id === id) {
+          setEditingDiscount(null);
+          resetDiscountForm();
+          setShowDiscountForm(false);
+        }
+      } catch (error) {
+        console.error('Error deleting discount code:', error);
+        alert('Error deleting discount code. Please try again.');
       }
     }
   }
@@ -1580,7 +1737,7 @@ The Peridot Images Team
   };
 
   // Send birthday emails to clients
-  const sendBirthdayEmails = () => {
+  const sendBirthdayEmails = useCallback(() => {
     const today = new Date();
     const todayString = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     
@@ -1594,10 +1751,10 @@ The Peridot Images Team
         window.open(mailtoLink);
       }
     });
-  };
+  }, [bookings, emailTemplates]);
 
   // Check and handle expired bookings
-  const checkExpiredBookings = () => {
+  const checkExpiredBookings = useCallback(() => {
     const now = new Date();
     const expiredBookings = bookings.filter(booking => 
       booking.expiresAt && new Date(booking.expiresAt) < now && booking.status === 'held'
@@ -1621,7 +1778,7 @@ The Peridot Images Team
       const mailtoLink = `mailto:${booking.email}?subject=${encodeURIComponent(personalizedSubject)}&body=${encodeURIComponent(personalizedBody)}`;
       window.open(mailtoLink);
     });
-  };
+  }, [bookings, emailTemplates, updateBookingStatus]);
 
   // Check for birthdays and expired bookings daily
   React.useEffect(() => {
@@ -1637,7 +1794,7 @@ The Peridot Images Team
     const interval = setInterval(checkDaily, 24 * 60 * 60 * 1000);
     
     return () => clearInterval(interval);
-  }, [bookings]);
+  }, [bookings, sendBirthdayEmails, checkExpiredBookings]);
 
   // Email recovery system for abandoned bookings
   // eslint-disable-next-line no-unused-vars
@@ -1987,16 +2144,16 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (currentStep === 'categories') {
-      trackPageView('categories');
+      trackPageViewAnalytics('categories');
       trackFunnelStep('categoryViews');
     } else if (currentStep === 'packages') {
-      trackPageView('packages');
+      trackPageViewAnalytics('packages');
       trackFunnelStep('packageViews');
     } else if (currentStep === 'clientform') {
-      trackPageView('booking-form');
+      trackPageViewAnalytics('booking-form');
       trackFunnelStep('bookingStarted');
     } else if (currentStep === 'confirmation') {
-      trackPageView('confirmation');
+      trackPageViewAnalytics('confirmation');
       trackFunnelStep('bookingCompleted');
     }
   }, [currentStep]);
@@ -2327,6 +2484,27 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     );
   };
 
+  // Track page views and user journey
+  const trackPageViewAnalytics = useCallback((page) => {
+    if (!currentSession) return;
+    
+    const pageView = {
+      page,
+      timestamp: new Date().toISOString(),
+      url: window.location.href
+    };
+    
+    setCurrentSession(prev => ({
+      ...prev,
+      pageViews: [...prev.pageViews, pageView]
+    }));
+    
+    setVisitorAnalytics(prev => ({
+      ...prev,
+      pageViews: prev.pageViews + 1
+    }));
+  }, [currentSession]);
+
   const VoiceControls = () => (
     <div className="voice-controls">
       <button
@@ -2339,13 +2517,12 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     </div>
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     initializeVisitorSession();
-    trackPageView('welcome');
+    trackPageViewAnalytics('welcome');
     getUserLocation();
     detectUserDevice();
-  }, []);
+  }, [trackPageViewAnalytics]);
 
   // Auto-save analytics
   React.useEffect(() => {
@@ -2481,27 +2658,6 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
         ...prev.referrers,
         [document.referrer || 'Direct']: (prev.referrers[document.referrer || 'Direct'] || 0) + 1
       }
-    }));
-  };
-
-  // Track page views and user journey
-  const trackPageView = (page) => {
-    if (!currentSession) return;
-    
-    const pageView = {
-      page,
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    };
-    
-    setCurrentSession(prev => ({
-      ...prev,
-      pageViews: [...prev.pageViews, pageView]
-    }));
-    
-    setVisitorAnalytics(prev => ({
-      ...prev,
-      pageViews: prev.pageViews + 1
     }));
   };
 
@@ -2751,15 +2907,18 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     ));
   };
 
+  // eslint-disable-next-line no-unused-vars
   const startEditingReview = (review) => {
     setEditingReview({ ...review });
   };
 
+  // eslint-disable-next-line no-unused-vars
   const cancelEditingReview = () => {
     setEditingReview(null);
   };
 
   // Get featured reviews for display
+  // eslint-disable-next-line no-unused-vars
   const getFeaturedReviews = () => {
     return reviews.filter(review => review.featured).slice(0, 3);
   };
@@ -2824,6 +2983,23 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
   const clearAllNotifications = () => {
     setAdminNotifications([]);
   };
+
+  // Show loading screen while Firebase data is being loaded
+  if (loading) {
+    return (
+      <div className="luxury-container">
+        <div className="luxury-background">
+          <div className="loading-screen">
+            <div className="loading-content">
+              <div className="loading-spinner"></div>
+              <h2>Loading Peridot Images...</h2>
+              <p>Connecting to our booking system</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="luxury-container">
@@ -3590,9 +3766,10 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
               </button>
               <button
                 onClick={handleBookingComplete}
+                disabled={isSubmitting}
                 className="nav-button primary"
               >
-                Payment Sent - Complete Booking
+                {isSubmitting ? 'Processing...' : 'Payment Sent - Complete Booking'}
               </button>
             </div>
           </div>
