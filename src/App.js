@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './index.css';
 import { packages, categoryNames, addons } from './packages.js';
 import PerryAssistant from './components/PerryAssistant.js';
 import { 
   addBooking, 
   getBookings, 
+  updateBookingStatus,
   getDiscountCodes,
   getDiscountCodeByCode,
   addDiscountCode,
+  addAdminNotification,
   saveSettings,
   getSettings,
   saveBlockedDates,
@@ -860,8 +862,17 @@ The Peridot Images Team
     
     if (email === 'imagesbyperidot@gmail.com' && password === 'peridot2025') {
       setIsAdminAuthenticated(true);
-      const existingBookings = JSON.parse(localStorage.getItem('peridotBookings') || '[]');
-      setBookings(existingBookings);
+      // Load bookings from Firebase instead of localStorage
+      const loadAdminBookings = async () => {
+        try {
+          const bookingsData = await getBookings();
+          setBookings(bookingsData);
+        } catch (error) {
+          console.error('Error loading admin bookings:', error);
+          alert('Error loading bookings. Please try again.');
+        }
+      };
+      loadAdminBookings();
     } else {
       alert('❌ Invalid email or password. Use the quick-fill buttons if needed.');
     }
@@ -1155,7 +1166,7 @@ The Peridot Images Team
     setIsSubmitting(true); // This makes it show "Processing..."
     
     try {
-      console.log('Starting booking process...'); // ADD THIS LINE
+      // console.log('Starting booking process...'); // Removed for production
       
       // Create booking object with proper status structure
       const newBooking = {
@@ -1181,12 +1192,12 @@ The Peridot Images Team
         cancelledAt: null
       };
 
-      console.log('About to save booking:', newBooking); // ADD THIS LINE
+      // console.log('About to save booking:', newBooking); // Removed for production
       
       // Save to Firebase
       const bookingId = await addBooking(newBooking);
       
-      console.log('Booking saved with ID:', bookingId); // ADD THIS LINE
+      // console.log('Booking saved with ID:', bookingId); // Removed for production
       
       // Update local state with Firebase ID
       const bookingWithId = { ...newBooking, id: bookingId };
@@ -2348,10 +2359,12 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(true);
     
-    // Get all reviews and shuffle them for variety
-    const allReviews = reviews.length > 0 ? reviews : [];
-    const shuffledReviews = [...allReviews].sort(() => Math.random() - 0.5);
-    const displayReviews = shuffledReviews.slice(0, 6); // Show up to 6 reviews
+    // Get all reviews and shuffle them for variety - use useMemo to prevent constant re-shuffling
+    const displayReviews = useMemo(() => {
+      const allReviews = reviews.length > 0 ? reviews : [];
+      const shuffledReviews = [...allReviews].sort(() => Math.random() - 0.5);
+      return shuffledReviews.slice(0, 6); // Show up to 6 reviews
+    }, [reviews.length]); // Only re-shuffle when reviews array length changes
     
     const reviewStats = getReviewStats();
     
@@ -2384,6 +2397,11 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     
     if (displayReviews.length === 0) {
       return null; // Don't show section if no reviews
+    }
+    
+    // Reset index if it's out of bounds
+    if (currentReviewIndex >= displayReviews.length) {
+      setCurrentReviewIndex(0);
     }
     
     return (
@@ -2522,7 +2540,7 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     trackPageViewAnalytics('welcome');
     getUserLocation();
     detectUserDevice();
-  }, [trackPageViewAnalytics]);
+  }, []); // Removed trackPageViewAnalytics from dependencies to fix warning
 
   // Auto-save analytics
   React.useEffect(() => {
@@ -2605,7 +2623,7 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
       }));
       
     } catch (error) {
-      console.log('Could not get location data');
+              // console.log('Could not get location data'); // Removed for production
       
       // Fallback: try to get location from browser geolocation
       if (navigator.geolocation) {
@@ -2619,7 +2637,7 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
             });
           },
           (error) => {
-            console.log('Geolocation denied or failed');
+            // console.log('Geolocation denied or failed'); // Removed for production
           }
         );
       }
@@ -4380,7 +4398,7 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                             total: hst.total
                           };
                         });
-                        console.log('HST Report:', hstReport);
+                        // console.log('HST Report:', hstReport); // Removed for production
                         alert('HST report generated! Check console for details.');
                       }}
                       className="action-button secondary"
@@ -5062,10 +5080,10 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                     <div style={{marginTop: '12px'}}>
                       <button
                         onClick={() => {
-                          console.log('=== MANUAL TEST ===');
-                          console.log('Date:', selectedDate);
-                          console.log('Time: 2:00 PM');
-                          console.log('Before toggle:', blockedTimeSlots);
+                                  // console.log('=== MANUAL TEST ==='); // Removed for production
+        // console.log('Date:', selectedDate); // Removed for production
+        // console.log('Time: 2:00 PM'); // Removed for production
+        // console.log('Before toggle:', blockedTimeSlots); // Removed for production
                           toggleTimeSlotBlock(selectedDate, '2:00 PM');
                         }}
                         style={{
@@ -5083,7 +5101,7 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                       
                       <button
                         onClick={() => {
-                          console.log('=== CLEAR TEST ===');
+                          // console.log('=== CLEAR TEST ==='); // Removed for production
                           setBlockedTimeSlots({});
                           setFakeBookings({});
                           localStorage.removeItem('peridotBlockedTimeSlots');
