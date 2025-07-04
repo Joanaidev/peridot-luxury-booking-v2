@@ -2540,7 +2540,23 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     trackPageViewAnalytics('welcome');
     getUserLocation();
     detectUserDevice();
-  }, []); // Removed trackPageViewAnalytics from dependencies to fix warning
+    
+    // Set up real-time listeners for admin
+    if (isAdminAuthenticated) {
+      const unsubscribeBookings = subscribeToBookings((updatedBookings) => {
+        setBookings(updatedBookings);
+      });
+      
+      const unsubscribeNotifications = subscribeToNotifications((updatedNotifications) => {
+        setAdminNotifications(updatedNotifications);
+      });
+      
+      return () => {
+        unsubscribeBookings();
+        unsubscribeNotifications();
+      };
+    }
+  }, [isAdminAuthenticated]); // Add isAdminAuthenticated as dependency
 
   // Auto-save analytics
   React.useEffect(() => {
