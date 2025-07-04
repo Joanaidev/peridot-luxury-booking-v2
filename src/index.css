@@ -2950,3 +2950,298 @@
       flex-direction: column;
     }
   }
+  
+  /* SIMPLE CALENDAR STYLES */
+  .simple-calendar-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border: 2px solid rgba(245, 158, 11, 0.2);
+    border-radius: 20px;
+    padding: 32px;
+    margin-top: 24px;
+  }
+  
+  .simple-calendar-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  
+  .simple-calendar-header h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem;
+    color: #262626;
+    margin-bottom: 8px;
+  }
+  
+  .simple-calendar-header p {
+    color: #6b7280;
+    font-size: 1rem;
+  }
+  
+  .simple-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  
+  .simple-calendar-day {
+    aspect-ratio: 1;
+    border: 2px solid rgba(245, 158, 11, 0.2);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    background: rgba(255, 255, 255, 0.8);
+  }
+  
+  .simple-calendar-day.empty {
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+  
+  .simple-calendar-day.weekend {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+  
+  .simple-calendar-day.weekend:hover {
+    background: rgba(245, 158, 11, 0.2);
+    transform: scale(1.05);
+  }
+  
+  .simple-calendar-day.blocked {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #dc2626;
+    color: #dc2626;
+  }
+  
+  .simple-calendar-day.has-bookings {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #059669;
+    color: #059669;
+  }
+  
+  .simple-calendar-day.today {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #2563eb;
+    color: #2563eb;
+  }
+  
+  .simple-calendar-day .day-number {
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+  
+  .simple-calendar-day .blocked-icon {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.8rem;
+  }
+  
+  .simple-calendar-day .booking-icon {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 0.8rem;
+  }
+  
+  .simple-calendar-day .today-indicator {
+    position: absolute;
+    bottom: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  
+  .simple-calendar-legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  
+  .simple-calendar-legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #6b7280;
+  }
+  
+  .simple-calendar-legend .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  
+  .simple-calendar-legend .legend-dot.available {
+    background: rgba(245, 158, 11, 0.4);
+  }
+  
+  .simple-calendar-legend .legend-dot.blocked {
+    background: #dc2626;
+  }
+  
+  .simple-calendar-legend .legend-dot.booked {
+    background: #059669;
+  }
+  
+  .simple-calendar-legend .legend-dot.today {
+    background: #2563eb;
+  }
+  
+  /* CALENDAR ACTIONS */
+  .calendar-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  
+  /* FIX REVIEWS CAROUSEL GLITCHING */
+  .testimonials-carousel {
+    position: relative;
+    overflow: hidden;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border: 2px solid rgba(245, 158, 11, 0.2);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .testimonial-card {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    transition: all 0.5s ease;
+    opacity: 0;
+    transform: translateX(100%);
+    will-change: transform, opacity;
+  }
+  
+  .testimonial-card.active {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  
+  .testimonial-card .stars {
+    color: #f59e0b;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+  
+  .testimonial-card .review-text {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #374151;
+    margin-bottom: 20px;
+    font-style: italic;
+    max-width: 600px;
+  }
+  
+  .testimonial-author {
+    font-weight: 600;
+    color: #262626;
+    font-size: 1rem;
+  }
+  
+  .testimonial-author strong {
+    color: #f59e0b;
+  }
+  
+  /* CAROUSEL CONTROLS - STABLE */
+  .carousel-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+  }
+  
+  .carousel-btn {
+    background: rgba(245, 158, 11, 0.1);
+    border: 2px solid rgba(245, 158, 11, 0.3);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1.2rem;
+    color: #d97706;
+  }
+  
+  .carousel-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+    transform: scale(1.1);
+  }
+  
+  .carousel-btn:active {
+    transform: scale(0.95);
+  }
+  
+  /* CAROUSEL INDICATORS - STABLE */
+  .carousel-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  
+  .indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(245, 158, 11, 0.3);
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .indicator.active {
+    background: #f59e0b;
+    transform: scale(1.2);
+  }
+  
+  .indicator:hover {
+    background: rgba(245, 158, 11, 0.5);
+  }
+  
+  /* AUTO-PLAY TOGGLE - STABLE */
+  .auto-play-toggle {
+    background: rgba(245, 158, 11, 0.1);
+    border: 2px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    color: #d97706;
+    margin-top: 16px;
+  }
+  
+  .auto-play-toggle.active {
+    background: rgba(245, 158, 11, 0.2);
+    color: #d97706;
+  }
+  
+  .auto-play-toggle:hover {
+    background: rgba(245, 158, 11, 0.15);
+  }

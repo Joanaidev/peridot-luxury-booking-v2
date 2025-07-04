@@ -10,6 +10,7 @@ import {
   getDiscountCodeByCode,
   addDiscountCode,
   addAdminNotification,
+  getAdminNotifications,
   saveSettings,
   getSettings,
   saveBlockedDates,
@@ -861,9 +862,10 @@ The Peridot Images Team
     const password = adminCredentials.password.trim();
     
     if (email === 'imagesbyperidot@gmail.com' && password === 'peridot2025') {
+      console.log('Admin login successful, loading bookings...');
       setIsAdminAuthenticated(true);
       
-      // Load bookings from Firebase and set up real-time updates
+      // Load bookings from Firebase immediately
       const loadAdminBookings = async () => {
         try {
           console.log('Loading admin bookings from Firebase...');
@@ -871,17 +873,14 @@ The Peridot Images Team
           console.log('Bookings loaded:', bookingsData.length, 'bookings');
           setBookings(bookingsData);
           
-          // Set up real-time subscription for live updates
-          const unsubscribe = subscribeToBookings((updatedBookings) => {
-            console.log('Real-time booking update:', updatedBookings.length, 'bookings');
-            setBookings(updatedBookings);
-          });
+          // Also load notifications
+          const notificationsData = await getAdminNotifications();
+          console.log('Notifications loaded:', notificationsData.length, 'notifications');
+          setAdminNotifications(notificationsData);
           
-          // Store unsubscribe function for cleanup
-          window.adminUnsubscribe = unsubscribe;
         } catch (error) {
-          console.error('Error loading admin bookings:', error);
-          alert('Error loading bookings. Please try again.');
+          console.error('Error loading admin data:', error);
+          alert('Error loading admin data. Please try again.');
         }
       };
       
@@ -2382,8 +2381,9 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     // Get all reviews and shuffle them for variety - use useMemo to prevent constant re-shuffling
     const displayReviews = useMemo(() => {
       const allReviews = reviews.length > 0 ? reviews : [];
-      const shuffledReviews = [...allReviews].sort(() => Math.random() - 0.5);
-      return shuffledReviews.slice(0, 6); // Show up to 6 reviews
+      // Use a stable sort to prevent constant re-shuffling
+      const stableReviews = [...allReviews].sort((a, b) => a.id.localeCompare(b.id));
+      return stableReviews.slice(0, 6); // Show up to 6 reviews
     }, [reviews.length]); // Only re-shuffle when reviews array length changes
     
     const reviewStats = getReviewStats();
@@ -2560,23 +2560,33 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
     trackPageViewAnalytics('welcome');
     getUserLocation();
     detectUserDevice();
-    
-    // Set up real-time listeners for admin
+  }, []); // Keep this separate from admin-specific logic
+
+  // Separate useEffect for admin real-time subscriptions
+  React.useEffect(() => {
     if (isAdminAuthenticated) {
+      console.log('Setting up admin real-time subscriptions...');
+      
+      // Set up real-time booking listener
       const unsubscribeBookings = subscribeToBookings((updatedBookings) => {
+        console.log('Real-time booking update received:', updatedBookings.length, 'bookings');
         setBookings(updatedBookings);
       });
       
+      // Set up real-time notification listener
       const unsubscribeNotifications = subscribeToNotifications((updatedNotifications) => {
+        console.log('Real-time notification update received:', updatedNotifications.length, 'notifications');
         setAdminNotifications(updatedNotifications);
       });
       
+      // Cleanup function
       return () => {
+        console.log('Cleaning up admin real-time subscriptions...');
         unsubscribeBookings();
         unsubscribeNotifications();
       };
     }
-  }, [isAdminAuthenticated]); // Add isAdminAuthenticated as dependency
+  }, [isAdminAuthenticated]);
 
   // Auto-save analytics
   React.useEffect(() => {
@@ -4635,6 +4645,34 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                       >
                         📋 Week View
                       </button>
+                      <button
+                        onClick={() => setCalendarView('simple')}
+                        className={`view-toggle-btn ${calendarView === 'simple' ? 'active' : ''}`}
+                      >
+                        🗓️ Simple Calendar
+                      </button>
+                    </div>
+                    
+                    <div className="calendar-actions">
+                      <button
+                        onClick={() => {
+                          const today = new Date().toISOString().split('T')[0];
+                          toggleDateBlock(today);
+                        }}
+                        className="action-button secondary"
+                      >
+                        🚫 Block Today
+                      </button>
+                      <button
+                        onClick={() => {
+                          setBlockedDates([]);
+                          setBlockedTimeSlots({});
+                          alert('✅ All dates and time slots unblocked!');
+                        }}
+                        className="action-button secondary"
+                      >
+                        ✅ Clear All Blocks
+                      </button>
                     </div>
                     
                     <div className="calendar-legend">
@@ -4796,6 +4834,102 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                               );
                             })}
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SIMPLE CALENDAR VIEW - Google Calendar Style */}
+                  {calendarView === 'simple' && (
+                    <div className="simple-calendar-container">
+                      <div className="simple-calendar-header">
+                        <h3>Simple Calendar Management</h3>
+                        <p>Click dates to block/unblock them. Changes sync immediately to client booking.</p>
+                      </div>
+                      
+                      <div className="simple-calendar-grid">
+                        {(() => {
+                          const today = new Date();
+                          const currentMonth = today.getMonth();
+                          const currentYear = today.getFullYear();
+                          const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                          const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+                          
+                          const calendarDays = [];
+                          
+                          // Add empty cells for days before the first day of the month
+                          for (let i = 0; i < firstDayOfMonth; i++) {
+                            calendarDays.push(null);
+                          }
+                          
+                          // Add all days of the month
+                          for (let day = 1; day <= daysInMonth; day++) {
+                            const date = new Date(currentYear, currentMonth, day);
+                            const dateString = date.toISOString().split('T')[0];
+                            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                            const isBlocked = blockedDates.includes(dateString);
+                            const hasBookings = getBookingsForDate(dateString).length > 0;
+                            const isToday = dateString === today.toISOString().split('T')[0];
+                            
+                            calendarDays.push({
+                              day,
+                              date: dateString,
+                              isWeekend,
+                              isBlocked,
+                              hasBookings,
+                              isToday
+                            });
+                          }
+                          
+                          return calendarDays.map((dayData, index) => (
+                            <div
+                              key={index}
+                              className={`simple-calendar-day ${
+                                !dayData ? 'empty' : ''
+                              } ${
+                                dayData?.isWeekend ? 'weekend' : ''
+                              } ${
+                                dayData?.isBlocked ? 'blocked' : ''
+                              } ${
+                                dayData?.hasBookings ? 'has-bookings' : ''
+                              } ${
+                                dayData?.isToday ? 'today' : ''
+                              }`}
+                              onClick={() => {
+                                if (dayData && dayData.isWeekend) {
+                                  toggleDateBlock(dayData.date);
+                                }
+                              }}
+                            >
+                              {dayData && (
+                                <>
+                                  <div className="day-number">{dayData.day}</div>
+                                  {dayData.isBlocked && <div className="blocked-icon">🔒</div>}
+                                  {dayData.hasBookings && <div className="booking-icon">📸</div>}
+                                  {dayData.isToday && <div className="today-indicator">Today</div>}
+                                </>
+                              )}
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                      
+                      <div className="simple-calendar-legend">
+                        <div className="legend-item">
+                          <span className="legend-dot available"></span>
+                          Available Weekend
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-dot blocked"></span>
+                          Blocked
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-dot booked"></span>
+                          Has Bookings
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-dot today"></span>
+                          Today
                         </div>
                       </div>
                     </div>
