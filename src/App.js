@@ -883,7 +883,6 @@ The Peridot Images Team
           alert('Error loading admin data. Please try again.');
         }
       };
-      
       loadAdminBookings();
     } else {
       alert('❌ Invalid email or password. Use the quick-fill buttons if needed.');
@@ -891,17 +890,10 @@ The Peridot Images Team
   };
 
   const handleAdminLogout = () => {
-    // Clean up real-time subscriptions
-    if (window.adminUnsubscribe) {
-      window.adminUnsubscribe();
-      window.adminUnsubscribe = null;
-    }
-    
     setCurrentView('client');
     setIsAdminAuthenticated(false);
     setAdminCredentials({ email: '', password: '' });
     setAdminCurrentTab('dashboard');
-    setBookings([]); // Clear bookings when logging out
   };
 
   const updateBookingStatus = useCallback(async (bookingId, newStatus, paymentStatus = null, extraData = {}) => {
@@ -4433,23 +4425,6 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                       📥 Export All Bookings
                     </button>
                     <button
-                      onClick={async () => {
-                        try {
-                          console.log('Manually refreshing bookings...');
-                          const freshBookings = await getBookings();
-                          console.log('Fresh bookings loaded:', freshBookings.length);
-                          setBookings(freshBookings);
-                          alert(`✅ Refreshed! Found ${freshBookings.length} bookings.`);
-                        } catch (error) {
-                          console.error('Error refreshing bookings:', error);
-                          alert('❌ Error refreshing bookings');
-                        }
-                      }}
-                      className="action-button secondary"
-                    >
-                      🔄 Refresh Bookings
-                    </button>
-                    <button
                       onClick={() => {
                         const hstReport = bookings.map(booking => {
                           const hst = calculateHST(booking.totalPrice);
@@ -4471,17 +4446,11 @@ Top Package: ${weekBookings.length > 0 ? weekBookings.reduce((acc, b) => {
                   </div>
 
                   <div className="bookings-table detailed">
-                    <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '8px', fontSize: '0.9rem' }}>
-                      📊 <strong>Debug Info:</strong> Currently showing {bookings.length} bookings from Firebase
-                    </div>
                     {bookings.length === 0 ? (
                       <div className="no-bookings">
                         <div className="no-bookings-icon">📝</div>
                         <h4>No bookings yet</h4>
                         <p>New bookings will appear here once clients start booking sessions.</p>
-                        <p style={{ marginTop: '16px', fontSize: '0.9rem', color: '#6b7280' }}>
-                          💡 Try clicking "🔄 Refresh Bookings" if you expect to see bookings here.
-                        </p>
                       </div>
                     ) : (
                       <div className="bookings-list detailed">
